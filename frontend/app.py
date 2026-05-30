@@ -1,14 +1,5 @@
 import streamlit as st
-
-from ingest import (
-    load_pdf,
-    split_documents
-)
-
-from rag_pipeline import (
-    create_vector_store,
-    create_rag_chain
-)
+import requests
 
 
 # ==========================================
@@ -29,17 +20,17 @@ st.set_page_config(
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-if "rag_chain" not in st.session_state:
-    st.session_state.rag_chain = None
-
-if "processed_file" not in st.session_state:
-    st.session_state.processed_file = None
-
 if "pages" not in st.session_state:
     st.session_state.pages = 0
 
 if "chunks" not in st.session_state:
     st.session_state.chunks = 0
+
+if "pdf_uploaded" not in st.session_state:
+    st.session_state.pdf_uploaded = False
+
+if "processed_file" not in st.session_state:
+    st.session_state.processed_file = None
 
 
 # ==========================================
@@ -57,7 +48,64 @@ with st.sidebar:
         type=["pdf"]
     )
 
-    # Clear Chat Button
+    # ==========================================
+    # UPLOAD TO FASTAPI
+    # ==========================================
+
+    if (
+        uploaded_file
+        and uploaded_file.name != st.session_state.processed_file
+    ):
+
+        files = {
+            "file": (
+                uploaded_file.name,
+                uploaded_file.getvalue(),
+                "application/pdf"
+            )
+        }
+
+        try:
+
+            with st.spinner(
+                "Processing PDF..."
+            ):
+
+                response = requests.post(
+                    "http://127.0.0.1:8000/upload",
+                    files=files
+                )
+
+                data = response.json()
+
+                st.session_state.pages = (
+                    data["pages"]
+                )
+
+                st.session_state.chunks = (
+                    data["chunks"]
+                )
+
+                st.session_state.pdf_uploaded = True
+
+                st.session_state.processed_file = (
+                    uploaded_file.name
+                )
+
+                st.success(
+                    data["message"]
+                )
+
+        except Exception as e:
+
+            st.error(
+                f"Upload Error: {str(e)}"
+            )
+
+    # ==========================================
+    # CLEAR CHAT
+    # ==========================================
+
     if st.button("🗑️ Clear Chat"):
 
         st.session_state.messages = []
@@ -65,6 +113,10 @@ with st.sidebar:
         st.rerun()
 
     st.markdown("---")
+
+    # ==========================================
+    # DOCUMENT STATS
+    # ==========================================
 
     st.subheader("📊 Document Stats")
 
@@ -76,17 +128,24 @@ with st.sidebar:
         f"Chunks: {st.session_state.chunks}"
     )
 
-    if st.session_state.rag_chain:
-        st.success("RAG Ready")
+    if st.session_state.pdf_uploaded:
+
+        st.success("✅ PDF Uploaded")
+
+        st.success("✅ RAG Ready")
 
     st.markdown("---")
+
+    # ==========================================
+    # FUTURE FEATURES
+    # ==========================================
 
     st.subheader("🚀 Future Features")
 
     st.markdown("""
     - Multi PDF Support
     - Citations
-    - FastAPI Backend
+    - MMR Retrieval
     - LangGraph Workflows
     - Multi-Agent System
     """)
@@ -98,61 +157,9 @@ with st.sidebar:
 
 st.title("📚 AI Research Assistant")
 
-st.caption("Phase 1 • RAG System")
+st.caption("Phase 2 • FastAPI Backend")
 
 st.markdown("---")
-
-
-# ==========================================
-# PROCESS PDF ONLY ONCE
-# ==========================================
-
-if (
-    uploaded_file
-    and
-    uploaded_file.name
-    != st.session_state.processed_file
-):
-
-    pdf_path = f"data/{uploaded_file.name}"
-
-    with open(pdf_path, "wb") as f:
-
-        f.write(
-            uploaded_file.getbuffer()
-        )
-
-    documents = load_pdf(
-        pdf_path
-    )
-
-    chunks = split_documents(
-        documents
-    )
-
-    vector_store = create_vector_store(
-        chunks
-    )
-
-    rag_chain = create_rag_chain(
-        vector_store
-    )
-
-    st.session_state.rag_chain = (
-        rag_chain
-    )
-
-    st.session_state.processed_file = (
-        uploaded_file.name
-    )
-
-    st.session_state.pages = (
-        len(documents)
-    )
-
-    st.session_state.chunks = (
-        len(chunks)
-    )
 
 
 # ==========================================
@@ -184,12 +191,11 @@ user_question = st.chat_input(
 # ==========================================
 
 if (
-    st.session_state.rag_chain
-    and
     user_question
+    and
+    st.session_state.pdf_uploaded
 ):
 
-    # Store User Message
     st.session_state.messages.append({
         "role": "user",
         "content": user_question
@@ -203,20 +209,24 @@ if (
 
     try:
 
-        # Generate Response
         with st.spinner(
             "Thinking..."
         ):
 
-            response = (
-                st.session_state.rag_chain
-                .invoke(user_question)
+            response = requests.post(
+                "http://127.0.0.1:8000/chat",
+                json={
+                    "question": user_question
+                }
             )
 
-        # Store Assistant Response
+            answer = (
+                response.json()["answer"]
+            )
+
         st.session_state.messages.append({
             "role": "assistant",
-            "content": response
+            "content": answer
         })
 
         with st.chat_message(
@@ -224,7 +234,7 @@ if (
         ):
 
             st.write(
-                response
+                answer
             )
 
     except Exception as e:
@@ -232,3 +242,18 @@ if (
         st.error(
             f"Error: {str(e)}"
         )
+
+
+# ==========================================
+# PDF NOT UPLOADED WARNING
+# ==========================================
+
+elif (
+    user_question
+    and
+    not st.session_state.pdf_uploaded
+):
+
+    st.warning(
+        "Please upload a PDF first."
+    )
