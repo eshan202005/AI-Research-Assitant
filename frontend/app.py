@@ -29,8 +29,8 @@ if "chunks" not in st.session_state:
 if "pdf_uploaded" not in st.session_state:
     st.session_state.pdf_uploaded = False
 
-if "processed_file" not in st.session_state:
-    st.session_state.processed_file = None
+if "processed_files" not in st.session_state:
+    st.session_state.processed_files = []
 
 
 # ==========================================
@@ -43,64 +43,80 @@ with st.sidebar:
 
     st.markdown("---")
 
-    uploaded_file = st.file_uploader(
-        "Upload your PDF",
-        type=["pdf"]
+    uploaded_files = st.file_uploader(
+        "Upload your PDFs",
+        type=["pdf"],
+        accept_multiple_files=True
     )
 
     # ==========================================
     # UPLOAD TO FASTAPI
     # ==========================================
 
-    if (
-        uploaded_file
-        and uploaded_file.name != st.session_state.processed_file
-    ):
+    if uploaded_files:
 
-        files = {
-            "file": (
-                uploaded_file.name,
-                uploaded_file.getvalue(),
-                "application/pdf"
-            )
-        }
+        current_files = [
+            file.name
+            for file in uploaded_files
+        ]
 
-        try:
+        if (
+            current_files
+            !=
+            st.session_state.processed_files
+        ):
 
-            with st.spinner(
-                "Processing PDF..."
-            ):
+            files = []
 
-                response = requests.post(
-                    "http://127.0.0.1:8000/upload",
-                    files=files
+            for file in uploaded_files:
+
+                files.append(
+                    (
+                        "files",
+                        (
+                            file.name,
+                            file.getvalue(),
+                            "application/pdf"
+                        )
+                    )
                 )
 
-                data = response.json()
+            try:
 
-                st.session_state.pages = (
-                    data["pages"]
+                with st.spinner(
+                    "Processing PDFs..."
+                ):
+
+                    response = requests.post(
+                        "http://127.0.0.1:8000/upload",
+                        files=files
+                    )
+
+                    data = response.json()
+
+                    st.session_state.pages = (
+                        data["pages"]
+                    )
+
+                    st.session_state.chunks = (
+                        data["chunks"]
+                    )
+
+                    st.session_state.pdf_uploaded = True
+
+                    st.session_state.processed_files = (
+                        current_files
+                    )
+
+                    st.success(
+                        data["message"]
+                    )
+
+            except Exception as e:
+
+                st.error(
+                    f"Upload Error: {str(e)}"
                 )
-
-                st.session_state.chunks = (
-                    data["chunks"]
-                )
-
-                st.session_state.pdf_uploaded = True
-
-                st.session_state.processed_file = (
-                    uploaded_file.name
-                )
-
-                st.success(
-                    data["message"]
-                )
-
-        except Exception as e:
-
-            st.error(
-                f"Upload Error: {str(e)}"
-            )
 
     # ==========================================
     # CLEAR CHAT
@@ -130,7 +146,7 @@ with st.sidebar:
 
     if st.session_state.pdf_uploaded:
 
-        st.success("✅ PDF Uploaded")
+        st.success("✅ PDFs Uploaded")
 
         st.success("✅ RAG Ready")
 
@@ -143,7 +159,7 @@ with st.sidebar:
     st.subheader("🚀 Future Features")
 
     st.markdown("""
-    - Multi PDF Support
+    - Metadata Tracking
     - Citations
     - MMR Retrieval
     - LangGraph Workflows
@@ -182,7 +198,7 @@ for message in st.session_state.messages:
 # ==========================================
 
 user_question = st.chat_input(
-    "Ask a question about your document..."
+    "Ask a question about your documents..."
 )
 
 
@@ -255,5 +271,5 @@ elif (
 ):
 
     st.warning(
-        "Please upload a PDF first."
+        "Please upload at least one PDF first."
     )

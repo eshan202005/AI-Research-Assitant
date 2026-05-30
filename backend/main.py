@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File
+from typing import List
 
 from backend.models import (
     ChatRequest,
@@ -48,30 +49,35 @@ def chat(request: ChatRequest):
     "/upload",
     response_model=UploadResponse
 )
-async def upload_pdf(file: UploadFile = File(...)):
+async def upload_pdf(files: List[UploadFile] = File(...)):
 
     global rag_chain
 
     # Save uploaded PDF
-    file_path = f"uploads/{file.filename}"
+    all_documents = []
 
-    with open(file_path, "wb") as f:
-        f.write(await file.read())
+    for file in files:
 
-    # Load PDF
-    documents = load_pdf(file_path)
+        file_path = f"uploads/{file.filename}"
 
-    # Split into chunks
-    chunks = split_documents(documents)
+        with open(file_path, "wb") as f:
+            f.write(await file.read())
 
-    # Create vector store
+        documents = load_pdf(file_path)
+
+        # metadata for future citations
+        for doc in documents:
+            doc.metadata["source"] = file.filename
+
+        all_documents.extend(documents)
+
+    chunks = split_documents(all_documents)
+
     vector_store = create_vector_store(chunks)
 
-    # Create RAG chain
     rag_chain = create_rag_chain(vector_store)
 
     return UploadResponse(
-    message="PDF processed successfully",
-    pages=len(documents),
-    chunks=len(chunks)
-    )
+        message=f"{len(files)} PDF(s) processed successfully",
+        pages=len(all_documents),
+        chunks=len(chunks))

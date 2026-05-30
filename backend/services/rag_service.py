@@ -4,6 +4,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser  
 from langchain_core.runnables import RunnableParallel , RunnablePassthrough
 from dotenv import load_dotenv
+import shutil
 load_dotenv()  # Load environment variables from .env file
 
 
@@ -37,9 +38,21 @@ def create_rag_chain(vector_store):# to create a Retrieval-Augmented Generation 
 
     # Create language model
     llm = ChatOpenAI(model="gpt-5-mini")
+    
+
+    shutil.rmtree(
+    "chroma_db",
+    ignore_errors=True
+)
 
     # Create retriever from vector store
-    retriever = vector_store.as_retriever(search_kwargs={"k": 4})
+    retriever = vector_store.as_retriever(
+    search_type="mmr",
+    search_kwargs={
+        "k": 4,
+        "fetch_k": 10
+    }
+    )
 
     prompt = ChatPromptTemplate.from_template(
         """
