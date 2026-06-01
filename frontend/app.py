@@ -2,9 +2,7 @@ import streamlit as st
 import requests
 
 
-# ==========================================
 # PAGE CONFIG
-# ==========================================
 
 st.set_page_config(
     page_title="AI Research Assistant",
@@ -53,7 +51,7 @@ with st.sidebar:
     # UPLOAD TO FASTAPI
     # ==========================================
 
-    if uploaded_files:
+    if uploaded_files: 
 
         current_files = [
             file.name
@@ -72,9 +70,9 @@ with st.sidebar:
 
                 files.append(
                     (
-                        "files",
+                        "files",#SHOULD BE same as parameter name in fastapi endpoint
                         (
-                            file.name,
+                            file.name,  #fast api accepts file:(...)
                             file.getvalue(),
                             "application/pdf"
                         )
@@ -88,18 +86,18 @@ with st.sidebar:
                 ):
 
                     response = requests.post(
-                        "http://127.0.0.1:8000/upload",
+                        "http://127.0.0.1:8000/upload", #send request to fastapi  
                         files=files
                     )
 
-                    data = response.json()
+                    data = response.json()  #extract response json which contains message, pages and chunks info from the backend after processing the uploaded pdfs
 
                     st.session_state.pages = (
-                        data["pages"]
+                        data["pages"]  # Extract the number of pages from the response
                     )
 
                     st.session_state.chunks = (
-                        data["chunks"]
+                        data["chunks"]# Extract the number of chunks from the response
                     )
 
                     st.session_state.pdf_uploaded = True
@@ -214,7 +212,7 @@ if (
 
     st.session_state.messages.append({
         "role": "user",
-        "content": user_question
+        "content": user_question  #append user question to the messages session state
     })
 
     with st.chat_message("user"):
@@ -230,18 +228,18 @@ if (
         ):
 
             response = requests.post(
-                "http://127.0.0.1:8000/chat",
+                "http://127.0.0.1:8000/chat",  # Send user question to FastAPI backend
                 json={
-                    "question": user_question
+                    "question": user_question  #field name should match field name in chatrequest model
                 }
             )
 
             answer = (
-                response.json()["answer"]
+                response.json()["answer"]  # Extract generated answer from API response
             )
 
         st.session_state.messages.append({
-            "role": "assistant",
+            "role": "assistant",    #append assistant answer to the messages session state
             "content": answer
         })
 
